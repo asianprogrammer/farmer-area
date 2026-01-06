@@ -1,4 +1,5 @@
 import PropTypes from "prop-types";
+import { useEffect, useMemo, useRef } from "react";
 import { NavLink } from "react-router-dom";
 import Modal from "./Modal";
 
@@ -12,6 +13,41 @@ export default function FollowListModal({
   onToggleFollow,
   isFollowing,
 }) {
+  const previousHashRef = useRef("");
+  const historyPushedRef = useRef(false);
+
+  const nativeBackHash = useMemo(() => {
+    const base = "follow-list";
+    return base;
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    if (!nativeBackHash) return undefined;
+
+    previousHashRef.current = window.location.hash;
+    const url = new URL(window.location.href);
+    url.hash = nativeBackHash;
+    window.history.pushState({ modal: nativeBackHash }, "", url);
+    historyPushedRef.current = true;
+
+    const handlePopState = () => {
+      onClose?.();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      if (historyPushedRef.current) {
+        const cleanupUrl = new URL(window.location.href);
+        cleanupUrl.hash = previousHashRef.current || "";
+        window.history.replaceState(window.history.state, "", cleanupUrl);
+        historyPushedRef.current = false;
+      }
+    };
+  }, [open, nativeBackHash, onClose]);
+
   const resolveActionLabel = (user) => {
     if (typeof actionLabel === "function") return actionLabel(user);
     return actionLabel;
