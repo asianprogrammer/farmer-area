@@ -60,11 +60,6 @@ export default function PostModal({
   const slideMediaRefs = useRef([]);
   const carouselViewportRef = useRef(null);
 
-  const autoplayPlugin = useMemo(
-    () => Autoplay({ delay: 4000, stopOnInteraction: false, stopOnMouseEnter: false }),
-    []
-  );
-
   const slides = useMemo(() => {
     if (!post) return [];
     const gallery = Array.isArray(post.mediaGallery)
@@ -73,6 +68,20 @@ export default function PostModal({
     if (gallery.length > 0) return gallery;
     return post.media?.src ? [post.media] : [];
   }, [post]);
+
+  const useCarousel = slides.length > 1;
+
+  const autoplayPlugin = useMemo(
+    () =>
+      useCarousel
+        ? Autoplay({
+            delay: 4000,
+            stopOnInteraction: true,
+            stopOnMouseEnter: true,
+          })
+        : null,
+    [useCarousel]
+  );
 
   const likedUsers = useMemo(
     () => (Array.isArray(post?.likedUsers) ? post.likedUsers.filter(Boolean) : []),
@@ -89,25 +98,31 @@ export default function PostModal({
     return likedUsers.slice(0, count);
   }, [likedUsers, likesPage]);
 
-  const useCarousel = slides.length > 1;
   const [emblaRef, emblaApi] = useEmblaCarousel(
     {
       align: "start",
       loop: useCarousel,
       startIndex: effectiveStartIndex,
+      containScroll: "trimSnaps",
     },
-    useCarousel ? [autoplayPlugin] : []
+    useCarousel && autoplayPlugin ? [autoplayPlugin] : []
+  );
+
+  const autoplayApi = useMemo(
+    () => emblaApi?.plugins?.()?.autoplay ?? null,
+    [emblaApi]
   );
 
   const pauseAutoplay = useCallback(() => {
-    autoplayPlugin?.stop?.();
-  }, [autoplayPlugin]);
+    autoplayApi?.stop?.();
+  }, [autoplayApi]);
 
   const resumeAutoplay = useCallback(() => {
+    if (!autoplayApi) return;
     if (isPointerOverMediaRef.current) return;
     if (isVideoPlayingRef.current) return;
-    autoplayPlugin?.play?.();
-  }, [autoplayPlugin]);
+    autoplayApi.play?.();
+  }, [autoplayApi]);
 
   const syncCarouselHeight = useCallback(() => {
     if (!emblaApi) return;

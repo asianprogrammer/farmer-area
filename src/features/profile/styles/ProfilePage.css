@@ -1005,7 +1005,14 @@
   grid-column: 2;
 }
 
+.post-modal-carousel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 @media (max-width: 900px) {
+  
   .post-modal-content {
     display: flex;
     height: fit-content;
