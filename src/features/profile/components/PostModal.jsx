@@ -274,6 +274,7 @@ export default function PostModal({
       open={open}
       onClose={onClose}
       size="xl"
+      disableBodyPadding
       className="post-modal post-modal--top"
       backdropZIndex={2000}
       header={

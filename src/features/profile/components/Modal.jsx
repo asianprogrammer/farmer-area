@@ -13,6 +13,8 @@ export default function Modal({
   className = "",
   backdropZIndex,
   backdropStyle,
+  bodyClassName,
+  disableBodyPadding = false,
 }) {
   useEffect(() => {
     if (!open) return undefined;
@@ -37,6 +39,13 @@ export default function Modal({
     ...(backdropZIndex ? { zIndex: backdropZIndex } : {}),
     ...(backdropStyle || {}),
   };
+
+  const bodyClass = [
+    "ka-modal-body",
+    disableBodyPadding ? null : bodyClassName || "padding-space",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return createPortal(
     <div
@@ -64,7 +73,7 @@ export default function Modal({
           </div>
         )}
 
-        <div className="ka-modal-body">{children}</div>
+        <div className={bodyClass}>{children}</div>
 
         {footer && <div className="ka-modal-footer">{footer}</div>}
       </div>
@@ -82,4 +91,6 @@ Modal.propTypes = {
   size: PropTypes.oneOf(["sm", "md", "lg", "xl"]),
   children: PropTypes.node,
   className: PropTypes.string,
+  bodyClassName: PropTypes.string,
+  disableBodyPadding: PropTypes.bool,
 };

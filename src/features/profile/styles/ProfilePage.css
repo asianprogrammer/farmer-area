@@ -977,6 +977,11 @@
   height: 100%;
   overflow-x: auto !important;
   background: rgba(11, 18, 31, 0.92);
+  box-sizing: border-box;
+}
+
+.ka-modal-body.padding-space {
+  padding: 1.5rem;
 }
 
 .ka-modal-close {
