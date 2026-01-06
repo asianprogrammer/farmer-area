@@ -59,6 +59,8 @@ export default function PostModal({
   const textareaRef = useRef(null);
   const slideMediaRefs = useRef([]);
   const carouselViewportRef = useRef(null);
+  const previousHashRef = useRef("");
+  const historyPushedRef = useRef(false);
 
   const slides = useMemo(() => {
     if (!post) return [];
@@ -166,6 +168,13 @@ export default function PostModal({
     }
   }, [emblaApi]);
 
+  const nativeBackHash = useMemo(() => {
+    const base = "post-modal";
+    if (!post?.id) return base;
+    const safeId = String(post.id).replace(/[^a-zA-Z0-9-_]/g, "");
+    return `${base}-${safeId || "item"}`;
+  }, [post?.id]);
+
   useEffect(() => {
     if (open && emblaApi) {
       const clampedIndex = Math.max(
@@ -185,6 +194,33 @@ export default function PostModal({
       };
     }
   }, [open, emblaApi, effectiveStartIndex, slides.length, syncCarouselHeight]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    if (!nativeBackHash) return undefined;
+
+    previousHashRef.current = window.location.hash;
+    const url = new URL(window.location.href);
+    url.hash = nativeBackHash;
+    window.history.pushState({ modal: nativeBackHash }, "", url);
+    historyPushedRef.current = true;
+
+    const handlePopState = () => {
+      onClose?.();
+    };
+
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+      if (historyPushedRef.current) {
+        const cleanupUrl = new URL(window.location.href);
+        cleanupUrl.hash = previousHashRef.current || "";
+        window.history.replaceState(window.history.state, "", cleanupUrl);
+        historyPushedRef.current = false;
+      }
+    };
+  }, [open, nativeBackHash, onClose]);
 
   useEffect(() => {
     if (!open) return;
