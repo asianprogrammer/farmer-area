@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 
@@ -48,6 +49,26 @@ function normalizeFollowUser(raw) {
           ? `${baseApi}${avatarPath}`
           : avatarFromSeed(username),
   };
+}
+
+function normalizeLikedUser(raw, fallbackSeed) {
+  if (!raw) return null;
+  if (typeof raw === "string" || typeof raw === "number") {
+    const id = String(raw);
+    return { id, username: id, name: id, avatar: avatarFromSeed(id) };
+  }
+  if (typeof raw === "object") {
+    const id = raw._id ?? raw.id ?? raw.userId ?? raw.username ?? null;
+    if (!id) return null;
+    const username = raw.username ?? String(id);
+    const name = raw.name ?? raw.fullName ?? raw.username ?? String(id);
+    const avatarPath = raw.profileImage ?? raw.avatar ?? null;
+    const avatar = avatarPath
+      ? `${baseApi}${avatarPath}`
+      : avatarFromSeed(username || fallbackSeed || String(id));
+    return { id, username, name, avatar };
+  }
+  return null;
 }
 
 export default function UserProfilePage() {
@@ -134,49 +155,68 @@ export default function UserProfilePage() {
         // ২️⃣ User posts fetch
         const postsResponse = await fetchUserPosts(userData._id);
         const fetchedPosts = postsResponse?.posts ?? [];
-        const normalizedPosts = fetchedPosts.map((post) => ({
-          ...post,
-          id: post._id,
-          author: {
-            id: post.user?._id || post.userId,
-            name: post.user?.username || post.user?.name || "Unknown",
-            avatar: post.user?.profileImage
-              ? `${baseApi}${post.user.profileImage}`
-              : avatarFromSeed(post.user?.username || "user"),
-          },
-          content: post.text || post.content || post.caption || post.description || "",
-          likes: Array.isArray(post.likes) ? post.likes.length : 0,
-          liked:
-            Array.isArray(post.likes) && meId
-              ? post.likes.some((l) => String(resolveUserId(l)) === String(meId))
-              : false,
-          comments: (post.comments || []).map((c) => ({
-            id: c._id,
-            text: c.text,
+        const normalizedPosts = fetchedPosts.map((post) => {
+          const rawLikes = Array.isArray(post.likes) ? post.likes : [];
+          const likedUsers = rawLikes
+            .map((l) => normalizeLikedUser(l, meData?.username || meData?.name))
+            .filter(Boolean);
+          const liked = meId
+            ? likedUsers.some((u) => String(resolveUserId(u)) === String(meId))
+            : false;
+
+          return {
+            ...post,
+            id: post._id,
             author: {
-              id: resolveUserId(c.user),
-              name: c.user?.username || c.user?.name || "Unknown",
-              avatar: c.user?.profileImage
-                ? `${baseApi}${c.user?.profileImage}`
-                : avatarFromSeed(c.user?.username || "user"),
+              id: post.user?._id || post.userId,
+              name: post.user?.username || post.user?.name || "Unknown",
+              avatar: post.user?.profileImage
+                ? `${baseApi}${post.user.profileImage}`
+                : avatarFromSeed(post.user?.username || "user"),
             },
-            createdAt: c.createdAt,
-          })),
-          media:
-            post.images?.length > 0
-              ? { type: "image", src: `${baseApi}${post.images[0]}` }
-              : post.videos?.length > 0
-                ? { type: "video", src: `${baseApi}${post.videos[0]}` }
-                : null,
-          mediaGallery: (post.images || []).map((img) => ({
-            type: "image",
-            src: `${baseApi}${img}`,
-          })),
-          videoGallery: (post.videos || []).map((vid) => ({
-            type: "video",
-            src: `${baseApi}${vid}`,
-          })),
-        }));
+            content: post.text || post.content || post.caption || post.description || "",
+            likes: likedUsers.length,
+            liked,
+            likedUsers,
+            comments: (post.comments || []).map((c) => ({
+              id: c._id,
+              text: c.text,
+              author: {
+                id: resolveUserId(c.user),
+                name: c.user?.username || c.user?.name || "Unknown",
+                avatar: c.user?.profileImage
+                  ? `${baseApi}${c.user?.profileImage}`
+                  : avatarFromSeed(c.user?.username || "user"),
+              },
+              createdAt: c.createdAt,
+            })),
+            mediaGallery: [
+              ...(post.videos || []).map((vid) => ({
+                type: "video",
+                src: `${baseApi}${vid}`,
+              })),
+              ...(post.images || []).map((img) => ({
+                type: "image",
+                src: `${baseApi}${img}`,
+              })),
+            ],
+            videoGallery: (post.videos || []).map((vid) => ({
+              type: "video",
+              src: `${baseApi}${vid}`,
+            })),
+            media:
+              [
+                ...(post.videos || []).map((vid) => ({
+                  type: "video",
+                  src: `${baseApi}${vid}`,
+                })),
+                ...(post.images || []).map((img) => ({
+                  type: "image",
+                  src: `${baseApi}${img}`,
+                })),
+              ][0] ?? null,
+          };
+        });
         setPosts(normalizedPosts);
 
         try {
@@ -410,8 +450,8 @@ export default function UserProfilePage() {
         open={allPostsOpen}
         onClose={() => setAllPostsOpen(false)}
         posts={posts}
-        onSelect={(post) => {
-          openPostComments(post.id);
+        onSelect={(post, startIndex = 0) => {
+          openPostComments(post.id, startIndex);
           setAllPostsOpen(false);
         }}
       />

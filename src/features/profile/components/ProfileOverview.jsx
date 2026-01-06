@@ -17,6 +17,18 @@ function formatCount(type, count) {
   return `${count} ${suffix}`;
 }
 
+function resolveAvatarUrl(profile) {
+  const raw = profile?.profileImage ?? profile?.avatar ?? null;
+  if (!raw) {
+    return `https://i.pravatar.cc/120?u=${profile?._id || profile?.id || profile?.username || profile?.name || "user"}`;
+  }
+  if (typeof raw === "string" && (raw.startsWith("http://") || raw.startsWith("https://"))) {
+    return raw;
+  }
+  const normalized = typeof raw === "string" && raw.startsWith("/") ? raw : `/${raw}`;
+  return `${baseApi}${normalized}`;
+}
+
 export default function ProfileOverview({
   profile,
   stats,
@@ -47,7 +59,7 @@ export default function ProfileOverview({
   return (
     <section className="profile-overview">
       <img
-        src={`${baseApi}${profile.profileImage}`}
+        src={resolveAvatarUrl(profile)}
         alt={`${profile.name} avatar`}
         className="profile-overview-avatar"
       />
@@ -97,7 +109,8 @@ ProfileOverview.propTypes = {
   profile: PropTypes.shape({
     name: PropTypes.string.isRequired,
     username: PropTypes.string.isRequired,
-    avatar: PropTypes.string.isRequired,
+    profileImage: PropTypes.string,
+    avatar: PropTypes.string,
     bio: PropTypes.string,
   }).isRequired,
   stats: PropTypes.shape({

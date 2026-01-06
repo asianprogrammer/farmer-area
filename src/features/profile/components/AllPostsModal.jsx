@@ -2,21 +2,29 @@ import PropTypes from "prop-types";
 import Modal from "./Modal";
 
 export default function AllPostsModal({ open, onClose, posts, onSelect }) {
+  const mediaItems = (posts || []).flatMap((post) => {
+    const gallery = Array.isArray(post?.mediaGallery) ? post.mediaGallery : [];
+    if (!gallery.length) return [];
+    return gallery
+      .filter((item) => item && item.src)
+      .map((item, index) => ({ post, item, index }));
+  });
+
   return (
     <Modal open={open} onClose={onClose} title="সবগুলো পোস্ট" size="lg">
-      {posts?.length ? (
+      {mediaItems.length ? (
         <div className="all-posts-grid">
-          {posts.map((post, idx) => (
+          {mediaItems.map(({ post, item, index }, idx) => (
             <button
               type="button"
               className="all-posts-item"
-              key={`${post.id ?? 'p'}-${idx}`}
-              onClick={() => onSelect?.(post)}
+              key={`${post.id ?? "p"}-${idx}-${index}`}
+              onClick={() => onSelect?.(post, index)}
             >
-              {post.media?.type === "video" ? (
-                <video src={post.media?.src} />
+              {item.type === "video" ? (
+                <video src={item.src} muted playsInline preload="metadata" />
               ) : (
-                <img src={post.media?.src} alt={post.content || "পোস্টের ছবি"} />
+                <img src={item.src} alt={post.content || "পোস্টের ছবি"} />
               )}
             </button>
           ))}
@@ -34,10 +42,12 @@ AllPostsModal.propTypes = {
   posts: PropTypes.arrayOf(
     PropTypes.shape({
       id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]).isRequired,
-      media: PropTypes.shape({
-        type: PropTypes.oneOf(["image", "video"]),
-        src: PropTypes.string,
-      }),
+      mediaGallery: PropTypes.arrayOf(
+        PropTypes.shape({
+          type: PropTypes.oneOf(["image", "video"]),
+          src: PropTypes.string,
+        })
+      ),
       content: PropTypes.string,
     })
   ),

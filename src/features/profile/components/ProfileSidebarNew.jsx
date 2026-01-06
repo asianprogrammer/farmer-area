@@ -1,10 +1,9 @@
-/* eslint-disable no-unused-vars */
 import { useMemo, useState, useEffect } from "react";
 import PropTypes from "prop-types";
 import BizzShortsCarousel from "@/features/bizzShorts/components/BizzShortsCarousel";
 import { fetchMe } from "@/api/authApi";
 
-const FALLBACK_INFO = "তথ্য পাওয়া যায়নি";
+const FALLBACK_INFO = "তথ্য পাওয়া যায়নি";
 
 export default function ProfileSidebarNew({
   profile,
@@ -21,6 +20,7 @@ export default function ProfileSidebarNew({
     const loadCurrentUser = async () => {
       try {
         const res = await fetchMe();
+        // API response structure onujayi data set kora
         setCurrentUser(res?.data ?? res ?? null);
       } catch (err) {
         console.error("Failed to fetch current user", err);
@@ -29,22 +29,28 @@ export default function ProfileSidebarNew({
     loadCurrentUser();
   }, []);
 
+  // --- FAILS_SAFE LOGIC ---
   const shouldShowContactInfo = useMemo(() => {
-    // যদি নিজে owner হয় → show সবসময়
+    // ১. যদি parent থেকে সরাসরি isOwner true আসে
     if (isOwner) return true;
 
-    // যদি profile female হয় → hide contact info
-    if (profile?.gender?.toLowerCase() === "female") return false;
+    // ২. যদি currentUser এর ID আর প্রোফাইলের ID মিলে যায় (নিজে নিজের প্রোফাইলে থাকলে)
+    const currentUserId = currentUser?._id || currentUser?.id;
+    const profileId = profile?._id || profile?.id;
 
-    // অন্য সব ক্ষেত্রে দেখাবে
-    return true;
-  }, [isOwner, profile?.gender]);
+    if (currentUserId && profileId && currentUserId === profileId) {
+      return true;
+    }
+
+    // ৩. বাকি সবার জন্য (Publicly) বন্ধ থাকবে
+    return false;
+  }, [isOwner, currentUser, profile]);
 
   const carouselItems = useMemo(
     () =>
       (seeds || []).map((seed) => ({
         ...seed,
-        id: seed._id, // ← এখানে assign করলাম _id কে id
+        id: seed._id,
         mediaUrl: seed.mediaUrl ?? seed.image,
         photographer:
           seed.photographer || seed.supplier || profile?.name || "অজানা তথ্য",
@@ -57,8 +63,21 @@ export default function ProfileSidebarNew({
       <div className="profile-sidebar-card">
         <h3 style={{ margin: 0, fontSize: "1.1rem" }}>প্রাথমিক তথ্য</h3>
 
+        {/* Contact Info: Only for Owner */}
+        {shouldShowContactInfo && (
+          <>
+            <div className="sidebar-info-row">
+              ইমেইল : <span>{profile.email || FALLBACK_INFO}</span>
+            </div>
+            <div className="sidebar-info-row">
+              ফোন : <span>{profile.phone || FALLBACK_INFO}</span>
+            </div>
+          </>
+        )}
+
         <div className="sidebar-info-row">
-          বিভাগ : <span>{profile.state || FALLBACK_INFO}</span>
+          বিভাগ :{" "}
+          <span>{profile.state || profile.division || FALLBACK_INFO}</span>
         </div>
         <div className="sidebar-info-row">
           ঠিকানা : <span>{profile.address || FALLBACK_INFO}</span>
@@ -93,7 +112,7 @@ export default function ProfileSidebarNew({
             />
           ) : (
             <div className="empty-state seed-carousel-card__empty">
-              এখনও কোনও বীজ যোগ করা হয়নি
+              এখনও কোনও বীজ যোগ করা হয়নি
             </div>
           )
         ) : (
@@ -105,3 +124,22 @@ export default function ProfileSidebarNew({
     </aside>
   );
 }
+
+ProfileSidebarNew.propTypes = {
+  profile: PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    _id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    name: PropTypes.string,
+    email: PropTypes.string,
+    phone: PropTypes.string,
+    state: PropTypes.string,
+    division: PropTypes.string,
+    address: PropTypes.string,
+    gender: PropTypes.string,
+  }).isRequired,
+  isOwner: PropTypes.bool,
+  seeds: PropTypes.array,
+  hasMoreSeeds: PropTypes.bool,
+  onDeleteSeed: PropTypes.func,
+  onLoadMoreSeeds: PropTypes.func,
+};

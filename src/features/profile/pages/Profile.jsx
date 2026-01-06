@@ -31,6 +31,26 @@ function resolveUserId(user) {
   return user?.id ?? user?._id ?? user?.userId ?? user?.username ?? null;
 }
 
+function normalizeLikedUser(raw, fallbackSeed) {
+  if (!raw) return null;
+  if (typeof raw === "string" || typeof raw === "number") {
+    const id = String(raw);
+    return { id, username: id, name: id, avatar: avatarFromSeed(id) };
+  }
+  if (typeof raw === "object") {
+    const id = raw._id ?? raw.id ?? raw.userId ?? raw.username ?? null;
+    if (!id) return null;
+    const username = raw.username ?? String(id);
+    const name = raw.name ?? raw.fullName ?? raw.username ?? String(id);
+    const avatarPath = raw.profileImage ?? raw.avatar ?? null;
+    const avatar = avatarPath
+      ? `${baseApi}${avatarPath}`
+      : avatarFromSeed(username || fallbackSeed || String(id));
+    return { id, username, name, avatar };
+  }
+  return null;
+}
+
 export default function ProfilePage() {
   const { username } = useParams();
 
@@ -87,53 +107,74 @@ export default function ProfilePage() {
         let profileUserId = username ?? resolveUserId(meData);
         if (!profileUserId) throw new Error("Profile user not found");
 
-        // ৩️⃣ profile user-এর পোস্ট fetch
+        // ৩profile userএর পোস্ট fetch
         const postsResponse = await fetchUserPosts(profileUserId);
         const fetchedPosts = postsResponse ?? [];
 
-        // ৪️⃣ Normalize posts
-        const normalizedPosts = (fetchedPosts.posts || []).map((post) => ({
-          ...post,
-          id: post._id,
-          author: {
-            id: post.user?._id || post.userId,
-            name: post.user?.username || post.user?.name || "Unknown",
-            avatar: post.user?.profileImage
-              ? `${baseApi}${post.user.profileImage}`
-              : avatarFromSeed(post.user?.username || "user"),
-          },
-          content: post.text || post.content || post.caption || post.description || "",
-          likes: Array.isArray(post.likes) ? post.likes.length : 0,
-          liked:
-            Array.isArray(post.likes) &&
-            post.likes.some((l) => resolveUserId(l) === resolveUserId(meData)),
-          comments: (post.comments || []).map((c) => ({
-            id: c._id,
-            text: c.text,
+        // ৪Normalize posts
+        const normalizedPosts = (fetchedPosts.posts || []).map((post) => {
+          const meId = resolveUserId(meData);
+          const rawLikes = Array.isArray(post.likes) ? post.likes : [];
+          const likedUsers = rawLikes
+            .map((l) => normalizeLikedUser(l, meData?.username || meData?.name))
+            .filter(Boolean);
+          const liked = meId
+            ? likedUsers.some((u) => String(resolveUserId(u)).toLowerCase() === String(meId).toLowerCase())
+            : false;
+
+          return {
+            ...post,
+            id: post._id,
             author: {
-              id: resolveUserId(c.user),
-              name: c.user?.username || c.user?.name || "Unknown",
-              avatar: c.user?.profileImage
-                ? `${baseApi}${c.user?.profileImage}`
-                : avatarFromSeed(c.user?.username || "user"),
+              id: post.user?._id || post.userId,
+              name: post.user?.username || post.user?.name || "Unknown",
+              avatar: post.user?.profileImage
+                ? `${baseApi}${post.user.profileImage}`
+                : avatarFromSeed(post.user?.username || "user"),
             },
-            createdAt: c.createdAt,
-          })),
-          media:
-            post.images?.length > 0
-              ? { type: "image", src: `${baseApi}${post.images[0]}` }
-              : post.videos?.length > 0
-                ? { type: "video", src: `${baseApi}${post.videos[0]}` }
-                : null,
-          mediaGallery: (post.images || []).map((img) => ({
-            type: "image",
-            src: `${baseApi}${img}`,
-          })),
-          videoGallery: (post.videos || []).map((vid) => ({
-            type: "video",
-            src: `${baseApi}${vid}`,
-          })),
-        }));
+            content: post.text || post.content || post.caption || post.description || "",
+            likes: likedUsers.length,
+            liked,
+            likedUsers,
+            comments: (post.comments || []).map((c) => ({
+              id: c._id,
+              text: c.text,
+              author: {
+                id: resolveUserId(c.user),
+                name: c.user?.username || c.user?.name || "Unknown",
+                avatar: c.user?.profileImage
+                  ? `${baseApi}${c.user?.profileImage}`
+                  : avatarFromSeed(c.user?.username || "user"),
+              },
+              createdAt: c.createdAt,
+            })),
+            mediaGallery: [
+              ...(post.videos || []).map((vid) => ({
+                type: "video",
+                src: `${baseApi}${vid}`,
+              })),
+              ...(post.images || []).map((img) => ({
+                type: "image",
+                src: `${baseApi}${img}`,
+              })),
+            ],
+            videoGallery: (post.videos || []).map((vid) => ({
+              type: "video",
+              src: `${baseApi}${vid}`,
+            })),
+            media:
+              [
+                ...(post.videos || []).map((vid) => ({
+                  type: "video",
+                  src: `${baseApi}${vid}`,
+                })),
+                ...(post.images || []).map((img) => ({
+                  type: "image",
+                  src: `${baseApi}${img}`,
+                })),
+              ][0] ?? null,
+          };
+        });
 
         // Profile overview
         setProfile(
@@ -221,7 +262,14 @@ export default function ProfilePage() {
             ? {
               ...p,
               liked: willLike,
-              likes: willLike ? p.likes + 1 : p.likes - 1,
+              likedUsers: willLike
+                ? [...(p.likedUsers || []), viewerIdentity]
+                : (p.likedUsers || []).filter(
+                  (u) => String(resolveUserId(u)).toLowerCase() !== String(viewerIdentity?.id).toLowerCase()
+                ),
+              likes: willLike
+                ? (p.likes ?? 0) + 1
+                : Math.max((p.likes ?? 1) - 1, 0),
             }
             : p
         )
@@ -346,20 +394,31 @@ export default function ProfilePage() {
           likes: 0,
           liked: false,
           comments: [],
-          media:
-            postData.images?.length > 0
-              ? { type: "image", src: `${baseApi}${postData.images[0]}` }
-              : postData.videos?.length > 0
-                ? { type: "video", src: `${baseApi}${postData.videos[0]}` }
-                : null,
-          mediaGallery: (postData.images || []).map((img) => ({
-            type: "image",
-            src: `${baseApi}${img}`,
-          })),
+          mediaGallery: [
+            ...(postData.videos || []).map((vid) => ({
+              type: "video",
+              src: `${baseApi}${vid}`,
+            })),
+            ...(postData.images || []).map((img) => ({
+              type: "image",
+              src: `${baseApi}${img}`,
+            })),
+          ],
           videoGallery: (postData.videos || []).map((vid) => ({
             type: "video",
             src: `${baseApi}${vid}`,
           })),
+          media:
+            [
+              ...(postData.videos || []).map((vid) => ({
+                type: "video",
+                src: `${baseApi}${vid}`,
+              })),
+              ...(postData.images || []).map((img) => ({
+                type: "image",
+                src: `${baseApi}${img}`,
+              })),
+            ][0] ?? null,
         },
         ...prev,
       ]);
@@ -450,8 +509,8 @@ export default function ProfilePage() {
         open={allPostsOpen}
         onClose={() => setAllPostsOpen(false)}
         posts={posts}
-        onSelect={(post) => {
-          openPostComments(post.id);
+        onSelect={(post, startIndex = 0) => {
+          openPostComments(post.id, startIndex);
           setAllPostsOpen(false);
         }}
       />
